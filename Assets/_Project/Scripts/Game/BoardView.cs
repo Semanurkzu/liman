@@ -179,7 +179,7 @@ namespace Liman.Game
             _overlayTap = null;
             if (_animating) return;
             Rebuild();
-            if (_game.State.MoveCount == 0) ShowMechanicIntro();
+            if (_game.State != null && _game.State.MoveCount == 0) ShowMechanicIntro();
         }
 
         /// <summary>Explains a special container type once, on the first level the player meets it.</summary>
@@ -453,7 +453,11 @@ namespace Liman.Game
             _dockGroups.Clear();
             _shipGroups.Clear();
 
-            if (state == null) return;
+            if (state == null)
+            {
+                DrawLoading();
+                return;
+            }
 
             float halfWidthNeeded = Mathf.Max(BoardWidth(state), 7f) / 2f + 0.5f;
             _camera.orthographicSize = Mathf.Max(6.2f, halfWidthNeeded / _camera.aspect);
@@ -464,6 +468,39 @@ namespace Liman.Game
             DrawStacks(state, hiddenStackTop);
             DrawButtons(state);
             if (_overlayText != null && !_animating) DrawOverlay();
+        }
+
+        private void DrawLoading()
+        {
+            if (!_game.IsLoading)
+            {
+                Label(Vector2.zero, "Seviye yüklenemedi\n\nTekrar denemek için dokun", 0.35f, TextColor);
+                AddHitArea(Vector2.zero, new Vector2(100f, 100f), () => _game.StartLevel(_game.LevelNumber));
+                return;
+            }
+
+            // A container swinging from a crane cable. Hidden at first so quick loads don't flash.
+            var loading = Group("Loading", Vector2.zero);
+            loading.gameObject.SetActive(false);
+            var pivot = Group("Pivot", new Vector2(0f, 1.2f));
+            pivot.SetParent(loading, false);
+            Box(new Vector2(0f, -0.6f), new Vector2(0.05f, 1.2f), CableColor, 1, pivot);
+            Box(new Vector2(0f, -1.24f), new Vector2(ContainerWidth, 0.08f), CraneColor, 3, pivot);
+            DrawContainer(new Vector2(0f, -1.52f), ContainerSize, Container.Make(_game.LevelNumber), true, 2, pivot);
+            Label(new Vector2(0f, -1.3f), $"Seviye {_game.LevelNumber} hazırlanıyor", 0.3f, DimTextColor, 5, loading);
+            StartCoroutine(SwingWhileLoading(loading, pivot));
+        }
+
+        private static IEnumerator SwingWhileLoading(Transform loading, Transform pivot)
+        {
+            yield return new WaitForSecondsRealtime(0.2f);
+            if (loading == null) yield break;
+            loading.gameObject.SetActive(true);
+            for (float t = 0f; pivot != null; t += Time.unscaledDeltaTime)
+            {
+                pivot.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 3f) * 12f);
+                yield return null;
+            }
         }
 
         private void DrawHeader(BoardState state)

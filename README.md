@@ -51,7 +51,7 @@ Unity içinde: *Window → General → Test Runner → EditMode*.
 
 - [x] Vinç ve gemi kalkış animasyonları, geçici sentezlenmiş sesler
 - [ ] Gerçek görseller (konteyner/gemi sprite'ları) ve kayıtlı sesler
-- [ ] Seviye üretimini arka plan thread'ine taşıma ve yükleme ekranı
+- [x] Seviye üretimi ve ipucu çözücüsü arka plan thread'inde, sıradaki seviye önceden üretiliyor, yükleme ekranı
 - [x] Özel konteynerler: ağır, kilitli
 - [ ] Soğuk zincir konteyner (belirli hamle içinde yüklenmeli)
 - [ ] Liman geliştirme meta oyunu (para → yeni rıhtım/vinç/tema)

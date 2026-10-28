@@ -27,6 +27,22 @@ namespace Liman.Core.Tests
         }
 
         [Test]
+        public void ParallelGeneration_MatchesSequential()
+        {
+            // The game generates levels on worker threads, so the generator must not share state between calls.
+            const int count = 16;
+            var expected = new string[count];
+            for (int i = 0; i < count; i++)
+                expected[i] = new BoardState(LevelGenerator.ForLevel(i + 1).Level).GetStateKey();
+
+            var actual = new string[count];
+            System.Threading.Tasks.Parallel.For(0, count, i =>
+                actual[i] = new BoardState(LevelGenerator.ForLevel(i + 1).Level).GetStateKey());
+
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        [Test]
         public void FirstLevels_AreSolvable_WithParMatchingSolver()
         {
             for (int levelNumber = 1; levelNumber <= 30; levelNumber++)
