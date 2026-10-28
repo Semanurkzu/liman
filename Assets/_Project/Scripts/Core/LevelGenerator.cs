@@ -11,12 +11,20 @@ namespace Liman.Core
         public int StackCapacity { get; set; } = 4;
         public int EmptyStacks { get; set; } = 2;
         public int DockCount { get; set; } = 2;
+        public int HeavyContainers { get; set; }
+        public int LockedContainers { get; set; }
 
         /// <summary>Minimum number of Shift moves the optimal solution must need; the main difficulty knob.</summary>
         public int MinShifts { get; set; }
 
         public int MaxAttempts { get; set; } = 40;
         public int MaxSolverStates { get; set; } = Solver.DefaultMaxStates;
+
+        /// <summary>First level with heavy containers; the game introduces the mechanic there.</summary>
+        public const int FirstHeavyLevel = 8;
+
+        /// <summary>First level with locked containers; the game introduces the mechanic there.</summary>
+        public const int FirstLockedLevel = 15;
 
         /// <summary>Difficulty curve. Tune these numbers with playtesting.</summary>
         public static GeneratorSettings ForLevel(int level)
@@ -31,6 +39,8 @@ namespace Liman.Core
                 StackCapacity = shipCapacity + 1,
                 EmptyStacks = level < 6 ? 2 : 1,
                 DockCount = 2,
+                HeavyContainers = level < FirstHeavyLevel ? 0 : Math.Min(1 + (level - FirstHeavyLevel) / 6, 3),
+                LockedContainers = level < FirstLockedLevel ? 0 : Math.Min(1 + (level - FirstLockedLevel) / 8, 3),
                 MinShifts = Math.Min(1 + level / 4, 8),
             };
         }
@@ -103,6 +113,9 @@ namespace Liman.Core
                 for (int i = 0; i < ship.Capacity; i++)
                     containers.Add(ship.Color);
             rng.Shuffle(containers);
+            // Only draw from the RNG when a level has special containers, so earlier levels stay unchanged.
+            MarkRandom(rng, containers, settings.HeavyContainers, Container.Heavy);
+            MarkRandom(rng, containers, settings.LockedContainers, Container.Locked);
 
             var stacks = new List<List<int>>();
             for (int i = 0; i < containers.Count; i += settings.StackCapacity)
@@ -111,6 +124,21 @@ namespace Liman.Core
                 stacks.Add(new List<int>());
 
             return new LevelDefinition(settings.StackCapacity, settings.DockCount, stacks, ships);
+        }
+
+        /// <summary>Adds <paramref name="flag"/> to <paramref name="count"/> distinct containers that have no flags yet.</summary>
+        private static void MarkRandom(DeterministicRandom rng, List<int> containers, int count, int flag)
+        {
+            var plain = new List<int>();
+            for (int i = 0; i < containers.Count; i++)
+                if (containers[i] == Container.ColorOf(containers[i])) plain.Add(i);
+
+            for (int i = 0; i < count && plain.Count > 0; i++)
+            {
+                int pick = rng.Next(plain.Count);
+                containers[plain[pick]] |= flag;
+                plain.RemoveAt(pick);
+            }
         }
     }
 }

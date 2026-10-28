@@ -61,12 +61,36 @@ namespace Liman.Core
 
         public BoardState Clone() => new BoardState(this);
 
+        /// <summary>The stack's containers bottom to top, as <see cref="Container"/> values (colour plus flags).</summary>
         public IReadOnlyList<int> GetStack(int stack) => _stacks[stack];
 
-        public int TopColor(int stack)
+        /// <summary>The top container of a stack (colour plus flags), or <see cref="Empty"/>.</summary>
+        public int TopContainer(int stack)
         {
             var s = _stacks[stack];
             return s.Count == 0 ? Empty : s[s.Count - 1];
+        }
+
+        public int TopColor(int stack)
+        {
+            int container = TopContainer(stack);
+            return container == Empty ? Empty : Container.ColorOf(container);
+        }
+
+        /// <summary>Whether the crane may pick this container up: locked ones wait for a ship of their colour.</summary>
+        public bool IsMovable(int container)
+        {
+            if (!Container.IsLocked(container)) return true;
+            int color = Container.ColorOf(container);
+            foreach (int ship in _dockShip)
+                if (ship != Empty && _ships[ship].Color == color) return true;
+            return false;
+        }
+
+        public bool IsTopMovable(int stack)
+        {
+            int container = TopContainer(stack);
+            return container != Empty && IsMovable(container);
         }
 
         /// <summary>The ship currently at the dock, or null if the dock is empty.</summary>
@@ -103,16 +127,16 @@ namespace Liman.Core
                 {
                     if (!IsValidStack(move.From) || move.To < 0 || move.To >= _dockShip.Length) return false;
                     var ship = GetDockedShip(move.To);
-                    int color = TopColor(move.From);
-                    return ship != null && color != Empty && color == ship.Color;
+                    // A docked ship of the container's colour also unlocks it, so no separate lock check here.
+                    return ship != null && TopColor(move.From) == ship.Color;
                 }
                 case MoveType.Shift:
                 {
                     if (!IsValidStack(move.From) || !IsValidStack(move.To) || move.From == move.To) return false;
-                    int color = TopColor(move.From);
-                    if (color == Empty || _stacks[move.To].Count >= StackCapacity) return false;
+                    if (!IsTopMovable(move.From) || _stacks[move.To].Count >= StackCapacity) return false;
                     int targetTop = TopColor(move.To);
-                    return targetTop == Empty || targetTop == color;
+                    if (targetTop == Empty) return true;
+                    return !Container.IsHeavy(TopContainer(move.From)) && targetTop == TopColor(move.From);
                 }
                 default:
                     return false;
@@ -125,13 +149,13 @@ namespace Liman.Core
             if (!CanApply(move)) throw new InvalidOperationException($"Illegal move: {move}");
 
             var from = _stacks[move.From];
-            int color = from[from.Count - 1];
+            int container = from[from.Count - 1];
             from.RemoveAt(from.Count - 1);
             MoveCount++;
 
             if (move.Type == MoveType.Shift)
             {
-                _stacks[move.To].Add(color);
+                _stacks[move.To].Add(container);
                 return false;
             }
 
@@ -186,8 +210,9 @@ namespace Liman.Core
             for (int i = 0; i < _stacks.Length; i++)
             {
                 sb.Clear();
-                foreach (int color in _stacks[i])
-                    sb.Append((char)('a' + color));
+                // Flags are part of the value, so a heavy red and a plain red get different characters.
+                foreach (int container in _stacks[i])
+                    sb.Append((char)('a' + container));
                 stacks[i] = sb.ToString();
             }
             Array.Sort(stacks, StringComparer.Ordinal);

@@ -79,6 +79,8 @@ namespace Liman.Core
         /// A container must be loaded eventually, so loading it as soon as possible never hurts: it frees yard
         /// space and can only bring the next ship in earlier. Expanding just one Load when any exists gave the same
         /// optimal length as full BFS on 600 sampled levels while running ~13x faster.
+        /// Locked containers don't break this: a ship only leaves once it is full, and with one ship per colour
+        /// that means no locked container of its colour is left behind to re-lock.
         /// </summary>
         private static void KeepOnlyFirstLoad(List<Move> moves)
         {

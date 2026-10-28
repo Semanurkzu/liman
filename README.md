@@ -8,6 +8,8 @@ Konteyner sıralama bulmacası (Android, Unity). Rıhtımdaki karışık konteyn
 - **Yükleme:** Üstteki konteyner, rıhtıma yanaşmış **aynı renkteki** gemiye yüklenir.
 - **Aktarma:** Üstteki konteyner başka bir yığına konabilir; ancak hedef **boşsa** ya da üstü **aynı renkse** ve yığın dolu değilse.
 - **Gemi sırası:** Gemiler sabit sırayla gelir. Dolan gemi kalkar, yerine sıradaki yanaşır.
+- **Ağır konteyner** (kalın çerçeveli, 8. seviyeden itibaren): Başka bir konteynerin üstüne konamaz; sadece boş yığına ya da gemiye gider.
+- **Kilitli konteyner** (asma kilitli, 15. seviyeden itibaren): Kendi rengindeki gemi rıhtıma yanaşana kadar hareket ettirilemez.
 - **Amaç:** Bütün gemileri doldurup göndermek. Optimum hamle sayısı (Hedef) = 3 yıldız.
 
 ## Mimari
@@ -47,9 +49,11 @@ Unity içinde: *Window → General → Test Runner → EditMode*.
 
 ## Yol haritası
 
-- [ ] Gerçek görseller (konteyner/gemi sprite'ları), vinç ve gemi kalkış animasyonları, ses
+- [x] Vinç ve gemi kalkış animasyonları, geçici sentezlenmiş sesler
+- [ ] Gerçek görseller (konteyner/gemi sprite'ları) ve kayıtlı sesler
 - [ ] Seviye üretimini arka plan thread'ine taşıma ve yükleme ekranı
-- [ ] Özel konteynerler: kilitli, soğuk zincir (önce yüklenmeli), ağır
+- [x] Özel konteynerler: ağır, kilitli
+- [ ] Soğuk zincir konteyner (belirli hamle içinde yüklenmeli)
 - [ ] Liman geliştirme meta oyunu (para → yeni rıhtım/vinç/tema)
 - [ ] AdMob entegrasyonu (`IAdService` implementasyonu) ve Google Play Billing ile "Reklamları kaldır"
 - [ ] Günlük bulmaca (tarihten türetilen tohum)

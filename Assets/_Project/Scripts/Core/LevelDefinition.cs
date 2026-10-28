@@ -4,7 +4,8 @@ using System.Collections.Generic;
 namespace Liman.Core
 {
     /// <summary>
-    /// Immutable starting layout of a level. Stacks are listed bottom to top; ships in arrival order.
+    /// Immutable starting layout of a level. Stacks are listed bottom to top as <see cref="Container"/> values;
+    /// ships in arrival order.
     /// </summary>
     public sealed class LevelDefinition
     {
@@ -25,8 +26,9 @@ namespace Liman.Core
             {
                 var copy = new List<int>(stack);
                 if (copy.Count > stackCapacity) throw new ArgumentException("A stack exceeds the stack capacity.", nameof(stacks));
-                foreach (int color in copy)
+                foreach (int container in copy)
                 {
+                    int color = Container.ColorOf(container);
                     demand.TryGetValue(color, out int count);
                     demand[color] = count + 1;
                 }

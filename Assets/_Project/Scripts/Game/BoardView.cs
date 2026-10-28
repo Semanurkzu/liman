@@ -29,6 +29,9 @@ namespace Liman.Game
         private const float QueueShipWidth = 0.6f;
         private const float QueueShipGap = 0.15f;
         private const float SelectedLift = 0.3f;
+        private const float HeavyFrame = 0.08f;
+
+        private static readonly Vector2 ContainerSize = new Vector2(ContainerWidth - 0.08f, ContainerHeight - 0.06f);
 
         private static readonly Color[] Palette =
         {
@@ -77,6 +80,7 @@ namespace Liman.Game
         private Move? _hint;
         private string _overlayText;
         private Action _overlayTap;
+        private float _overlayTextHeight = 0.45f;
         private Coroutine _animation;
         private bool _animating;
         private Action _afterAnimation;
@@ -173,7 +177,28 @@ namespace Liman.Game
             _hint = null;
             _overlayText = null;
             _overlayTap = null;
-            if (!_animating) Rebuild();
+            if (_animating) return;
+            Rebuild();
+            if (_game.State.MoveCount == 0) ShowMechanicIntro();
+        }
+
+        /// <summary>Explains a special container type once, on the first level the player meets it.</summary>
+        private void ShowMechanicIntro()
+        {
+            if (TryIntro(GeneratorSettings.FirstHeavyLevel, "liman.intro.heavy",
+                    "Yeni: Ağır konteyner\n\nKalın çerçeveli konteynerler başka bir\nkonteynerin üstüne konamaz. Sadece\nboş yığına ya da gemiye gidebilir.\n\nDevam etmek için dokun"))
+                return;
+            TryIntro(GeneratorSettings.FirstLockedLevel, "liman.intro.locked",
+                "Yeni: Kilitli konteyner\n\nKilitli konteyner, kendi rengindeki\ngemi rıhtıma yanaşana kadar\nyerinden oynamaz.\n\nDevam etmek için dokun");
+        }
+
+        private bool TryIntro(int firstLevel, string seenKey, string text)
+        {
+            if (_game.LevelNumber < firstLevel || PlayerPrefs.GetInt(seenKey, 0) == 1) return false;
+            PlayerPrefs.SetInt(seenKey, 1);
+            PlayerPrefs.Save();
+            ShowOverlay(text, null, 0.3f);
+            return true;
         }
 
         private void OnMoveApplied(BoardState before, Move move)
@@ -215,10 +240,11 @@ namespace Liman.Game
             pending?.Invoke();
         }
 
-        private void ShowOverlay(string text, Action onTap)
+        private void ShowOverlay(string text, Action onTap, float textHeight = 0.45f)
         {
             _overlayText = text;
             _overlayTap = onTap;
+            _overlayTextHeight = textHeight;
             Rebuild();
         }
 
@@ -236,27 +262,45 @@ namespace Liman.Game
         private void OnStackTapped(int stack)
         {
             var state = _game.State;
-            if (_selectedStack < 0)
-            {
-                if (state.TopColor(stack) != BoardState.Empty) Select(stack);
-                return;
-            }
             if (_selectedStack == stack)
             {
                 _selectedStack = -1;
                 Rebuild();
                 return;
             }
-            if (_game.TryMove(Move.Shift(_selectedStack, stack))) return; // MoveApplied took over drawing.
+            if (_selectedStack >= 0)
+            {
+                if (_game.TryMove(Move.Shift(_selectedStack, stack))) return; // MoveApplied took over drawing.
 
-            if (state.TopColor(stack) != BoardState.Empty)
+                // A heavy container onto its own colour would be legal for a plain one: explain by refusing,
+                // rather than silently switching the selection to the target stack.
+                int selected = state.TopContainer(_selectedStack);
+                if (Container.IsHeavy(selected) && state.TopColor(stack) == Container.ColorOf(selected))
+                {
+                    Refuse(_stackTops[_selectedStack]);
+                    return;
+                }
+            }
+
+            if (state.IsTopMovable(stack))
             {
                 Select(stack);
-                return;
             }
-            // Only a full or mismatched target ends up here, but an empty stack can't be either.
-            _selectedStack = -1;
-            Rebuild();
+            else if (state.TopContainer(stack) != BoardState.Empty)
+            {
+                Refuse(_stackTops[stack]); // Locked until its ship docks.
+            }
+            else if (_selectedStack >= 0)
+            {
+                _selectedStack = -1;
+                Rebuild();
+            }
+        }
+
+        private void Refuse(Transform target)
+        {
+            _sfx.Play(_sfx.Error, 0.8f);
+            StartCoroutine(Shake(target));
         }
 
         private void Select(int stack)
@@ -280,9 +324,7 @@ namespace Liman.Game
             if (_game.TryMove(Move.Load(_selectedStack, dock))) return;
 
             // Wrong colour: keep the selection so the player can pick the right ship, and shake this one.
-            _sfx.Play(_sfx.Error, 0.8f);
-            var target = _shipGroups[dock] != null ? _shipGroups[dock] : _dockGroups[dock];
-            StartCoroutine(Shake(target));
+            Refuse(_shipGroups[dock] != null ? _shipGroups[dock] : _dockGroups[dock]);
         }
 
         private void OnHintTapped()
@@ -306,10 +348,10 @@ namespace Liman.Game
         {
             Render(before, move.From);
 
-            int color = before.TopColor(move.From);
+            int container = before.TopContainer(move.From);
             int fromIndex = before.GetStack(move.From).Count - 1;
             Vector2 start = ContainerPosition(before, move.From, fromIndex) + new Vector2(0f, SelectedLift);
-            var containerSize = new Vector2(ContainerWidth - 0.08f, ContainerHeight - 0.06f);
+            var containerSize = ContainerSize;
 
             Vector2 end;
             Vector2 endSize;
@@ -328,8 +370,8 @@ namespace Liman.Game
                 departs = load + 1 == ship.Capacity;
             }
 
-            var box = Box(start, containerSize, ColorOf(color), 6);
-            var spreader = Box(start, new Vector2(ContainerWidth, 0.08f), CraneColor, 7);
+            var box = DrawContainer(start, containerSize, container, true, 6);
+            var spreader = Box(start, new Vector2(ContainerWidth, 0.08f), CraneColor, 8);
             var cable = Box(start, new Vector2(0.05f, 1f), CableColor, -2);
             float top = _camera.orthographicSize + 1f;
             void Place(Vector2 position, Vector2 size)
@@ -510,7 +552,7 @@ namespace Liman.Game
                 {
                     var position = ContainerPosition(state, s, i);
                     if (selected && i == stack.Count - 1) position.y += SelectedLift;
-                    top = Box(position, new Vector2(ContainerWidth - 0.08f, ContainerHeight - 0.06f), ColorOf(stack[i]), 2);
+                    top = DrawContainer(position, ContainerSize, stack[i], state.IsMovable(stack[i]), 2);
                 }
                 _stackTops.Add(top);
 
@@ -531,7 +573,7 @@ namespace Liman.Game
             float height = _camera.orthographicSize * 2f;
             var size = new Vector2(height * _camera.aspect, height);
             var dim = Box(Vector2.zero, size, new Color(0f, 0f, 0f, 0.75f), 10);
-            var label = Label(Vector2.zero, _overlayText, 0.45f, TextColor, 11);
+            var label = Label(Vector2.zero, _overlayText, _overlayTextHeight, TextColor, 11);
             AddHitArea(Vector2.zero, size, OnOverlayTapped);
 
             var dimSprite = dim.GetComponent<SpriteRenderer>();
@@ -583,6 +625,45 @@ namespace Liman.Game
             go.transform.SetParent(_content, false);
             go.transform.localPosition = position;
             return go.transform;
+        }
+
+        /// <summary>
+        /// Draws a container as a group scaled to <paramref name="size"/>, so callers can move and resize it as one
+        /// box. Children are laid out in unit space with sizes converted from world units at the given size.
+        /// </summary>
+        private Transform DrawContainer(Vector2 center, Vector2 size, int container, bool movable, int order, Transform parent = null)
+        {
+            var group = new GameObject("Container").transform;
+            group.SetParent(parent != null ? parent : _content, false);
+            group.localPosition = center;
+            group.localScale = new Vector3(size.x, size.y, 1f);
+            Vector2 Unit(float worldX, float worldY) => new Vector2(worldX / size.x, worldY / size.y);
+
+            Color color = ColorOf(Container.ColorOf(container));
+            if (!movable) color = Color.Lerp(color, Color.black, 0.35f);
+
+            if (Container.IsHeavy(container))
+            {
+                // A thick dark frame: reads as reinforced steel at a glance.
+                Box(Vector2.zero, Vector2.one, Color.Lerp(color, Color.black, 0.6f), order, group);
+                Box(Vector2.zero, Vector2.one - Unit(2f * HeavyFrame, 2f * HeavyFrame), color, order + 1, group);
+            }
+            else
+            {
+                Box(Vector2.zero, Vector2.one, color, order, group);
+            }
+
+            if (Container.IsLocked(container))
+            {
+                // Padlock: closed and solid while locked, open and faded once its ship has docked.
+                var lockColor = movable ? new Color(0.1f, 0.1f, 0.1f, 0.35f) : new Color(0.1f, 0.1f, 0.1f, 0.9f);
+                float shackleLift = movable ? 0.05f : 0f;
+                Box(Unit(0f, -0.04f), Unit(0.22f, 0.15f), lockColor, order + 2, group);
+                Box(Unit(-0.08f, 0.07f + shackleLift), Unit(0.04f, 0.1f), lockColor, order + 2, group);
+                Box(Unit(0.08f, 0.07f), Unit(0.04f, 0.1f), lockColor, order + 2, group);
+                Box(Unit(0f, 0.12f + shackleLift), Unit(0.2f, 0.04f), lockColor, order + 2, group);
+            }
+            return group;
         }
 
         private Transform Box(Vector2 center, Vector2 size, Color color, int order, Transform parent = null)
