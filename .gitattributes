@@ -1,0 +1,22 @@
+* text=auto
+
+*.cs text diff=csharp
+*.asmdef text
+*.json text
+*.md text
+
+# Unity YAML assets: merge as text, never auto-convert line endings
+*.unity text eol=lf
+*.prefab text eol=lf
+*.asset text eol=lf
+*.meta text eol=lf
+*.mat text eol=lf
+*.anim text eol=lf
+*.controller text eol=lf
+
+*.png binary
+*.jpg binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.ttf binary
