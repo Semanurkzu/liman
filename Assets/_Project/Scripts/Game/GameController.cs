@@ -21,6 +21,9 @@ namespace Liman.Game
         public bool CanUndo => _history.Count > 0;
 
         public event Action StateChanged;
+
+        /// <summary>Raised after a move is applied and before <see cref="StateChanged"/>, with the state before the move.</summary>
+        public event Action<BoardState, Move> MoveApplied;
         public event Action<int> LevelCompleted;
         public event Action LevelStuck;
 
@@ -53,8 +56,10 @@ namespace Liman.Game
         {
             if (State.IsWon || !State.CanApply(move)) return false;
 
-            _history.Push(State.Clone());
+            var before = State.Clone();
+            _history.Push(before);
             State.Apply(move);
+            MoveApplied?.Invoke(before, move);
             StateChanged?.Invoke();
 
             if (State.IsWon) CompleteLevel();
