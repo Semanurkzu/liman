@@ -57,4 +57,4 @@ Unity içinde: *Window → General → Test Runner → EditMode*.
 
 ## Lisans
 
-MIT (veya tercih ettiğin lisans) — `LICENSE` dosyası ekle.
+[MIT](LICENSE)
