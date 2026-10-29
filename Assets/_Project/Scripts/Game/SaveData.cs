@@ -41,7 +41,8 @@ namespace Liman.Game
             while (StarsByLevel.Count < level) StarsByLevel.Add(0);
             StarsByLevel[level - 1] = Math.Max(StarsByLevel[level - 1], stars);
             HighestCompletedLevel = Math.Max(HighestCompletedLevel, level);
-            CurrentLevel = level + 1;
+            // Replaying an earlier level must not send the player back there.
+            CurrentLevel = Math.Max(CurrentLevel, level + 1);
         }
     }
 }

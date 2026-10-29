@@ -54,6 +54,12 @@ namespace Liman.Game
         public bool IsLoading { get; private set; }
         public bool CanUndo => _history.Count > 0;
 
+        /// <summary>
+        /// Moves made since the level (re)started, used for stars. Unlike <see cref="BoardState.MoveCount"/> it
+        /// is not rewound by undo, otherwise undoing every mistake would make three stars free.
+        /// </summary>
+        public int MoveCount { get; private set; }
+
         public event Action StateChanged;
 
         /// <summary>Raised after a move is applied and before <see cref="StateChanged"/>, with the state before the move.</summary>
@@ -92,6 +98,7 @@ namespace Liman.Game
             if (Level == null) return;
             State = new BoardState(Level.Level);
             _history.Clear();
+            MoveCount = 0;
             ChangeState();
         }
 
@@ -109,6 +116,7 @@ namespace Liman.Game
             var before = State.Clone();
             _history.Push(before);
             State.Apply(move);
+            MoveCount++;
             MoveApplied?.Invoke(before, move);
             ChangeState();
 
@@ -230,6 +238,7 @@ namespace Liman.Game
             Level = generation.Result;
             State = new BoardState(Level.Level);
             _history.Clear();
+            MoveCount = 0;
             ForgetGenerationsBefore(LevelNumber);
             GenerateInBackground(LevelNumber + 1);
             ChangeState();
@@ -252,7 +261,7 @@ namespace Liman.Game
 
         private void CompleteLevel()
         {
-            int stars = Scoring.Stars(State.MoveCount, Level.ParMoves);
+            int stars = Scoring.Stars(MoveCount, Level.ParMoves);
             _save.RecordCompletion(LevelNumber, stars);
             _save.Save();
             LevelCompleted?.Invoke(stars);

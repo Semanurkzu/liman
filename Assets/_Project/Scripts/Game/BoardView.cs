@@ -472,7 +472,7 @@ namespace Liman.Game
             float halfWidthNeeded = Mathf.Max(BoardWidth(state), 7f) / 2f + 0.5f;
             _camera.orthographicSize = Mathf.Max(6.2f, halfWidthNeeded / _camera.aspect);
 
-            DrawHeader(state);
+            DrawHeader();
             DrawQueue(state);
             DrawDocks(state);
             DrawStacks(state, hiddenStackTop);
@@ -513,10 +513,10 @@ namespace Liman.Game
             }
         }
 
-        private void DrawHeader(BoardState state)
+        private void DrawHeader()
         {
             Label(new Vector2(0f, TitleY), $"Seviye {_game.LevelNumber}", 0.6f, TextColor);
-            Label(new Vector2(0f, TitleY - 0.65f), $"Hamle {state.MoveCount}   |   Hedef {_game.Level.ParMoves}", 0.32f, DimTextColor);
+            Label(new Vector2(0f, TitleY - 0.65f), $"Hamle {_game.MoveCount}   |   Hedef {_game.Level.ParMoves}", 0.32f, DimTextColor);
 
             var soundPosition = new Vector2(_camera.orthographicSize * _camera.aspect - 0.9f, TitleY);
             Label(soundPosition, _sfx.Muted ? "Ses: Kapalı" : "Ses: Açık", 0.22f, DimTextColor);
