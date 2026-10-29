@@ -329,11 +329,21 @@ namespace Liman.Game
 
         private void OnHintTapped()
         {
-            _game.RequestHint(move =>
+            _game.RequestHint((outcome, move) =>
             {
-                _hint = move;
-                if (move == null) ShowOverlay("İpucu bulunamadı", null);
-                else Rebuild();
+                switch (outcome)
+                {
+                    case HintOutcome.Found:
+                        _hint = move;
+                        Rebuild();
+                        break;
+                    case HintOutcome.Unsolvable:
+                        ShowOverlay("Bu durumdan çıkış yok!\nGeri al ya da yeniden başla", null);
+                        break;
+                    case HintOutcome.NotFound:
+                        ShowOverlay("İpucu bulunamadı", null);
+                        break;
+                }
             });
         }
 

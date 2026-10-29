@@ -7,11 +7,28 @@ using UnityEngine;
 
 namespace Liman.Game
 {
+    public enum HintOutcome
+    {
+        /// <summary>The ad was watched; the move is the first step of an optimal solution.</summary>
+        Found,
+
+        /// <summary>The player skipped or closed the rewarded ad.</summary>
+        AdDeclined,
+
+        /// <summary>The board can no longer be won; no ad was shown.</summary>
+        Unsolvable,
+
+        /// <summary>The solver gave up or failed, so there is no hint to offer; no ad was shown.</summary>
+        NotFound,
+    }
+
     /// <summary>
     /// Owns the level flow (start, moves, undo, hints, completion) and talks to Liman.Core.
     /// Knows nothing about rendering; views subscribe to its events.
     /// Level generation and hint solving run on worker threads (Liman.Core is pure C# and keeps no shared
     /// state), and the next level is generated while the current one is played so "continue" is instant.
+    /// Every board the player reaches is also solved in the background: that detects dead ends that still have
+    /// legal moves, and lets a hint be checked before the player is asked to watch an ad for it.
     /// </summary>
     public sealed class GameController : MonoBehaviour
     {
@@ -20,6 +37,15 @@ namespace Liman.Game
         private IAdService _ads;
         private SaveData _save;
         private int _stateVersion;
+
+        // At most one background solve runs at a time; when it finishes on a stale board, the latest board is
+        // solved next, so fast play never queues up solves.
+        private Task<SolveResult> _analysis;
+
+        /// <summary>Solution of the board at <see cref="_solutionVersion"/>; null if that solve failed.</summary>
+        private SolveResult _solution;
+        private int _solutionVersion = -1;
+        private int _stuckVersion = -1;
 
         /// <summary>The level in play, or null while <see cref="IsLoading"/>.</summary>
         public BoardState State { get; private set; }
@@ -87,7 +113,7 @@ namespace Liman.Game
             ChangeState();
 
             if (State.IsWon) CompleteLevel();
-            else if (State.IsStuck) LevelStuck?.Invoke();
+            else if (State.IsStuck) ReportStuck();
             return true;
         }
 
@@ -99,37 +125,78 @@ namespace Liman.Game
         }
 
         /// <summary>
-        /// Hints cost a rewarded ad. The callback gets null if no ad was watched or no solution exists, and is
-        /// skipped entirely if the board changed while the solver was running, since the hint would be stale.
+        /// Hints cost a rewarded ad, which is only offered once the board is known to have a solution, so the
+        /// player never watches an ad for nothing. The move is only set for <see cref="HintOutcome.Found"/>.
+        /// The callback is skipped entirely if the board changes before it can be delivered, since the hint
+        /// would be stale.
         /// </summary>
-        public void RequestHint(Action<Move?> onHint)
+        public void RequestHint(Action<HintOutcome, Move?> onHint)
         {
-            if (State == null) return;
+            if (State == null || State.IsWon) return;
+            StartCoroutine(OfferHint(_stateVersion, onHint));
+        }
+
+        private IEnumerator OfferHint(int version, Action<HintOutcome, Move?> onHint)
+        {
+            while (_solutionVersion != version)
+            {
+                if (version != _stateVersion) yield break;
+                yield return null;
+            }
+
+            var solution = _solution;
+            if (solution == null || solution.HitStateLimit)
+            {
+                onHint(HintOutcome.NotFound, null);
+                yield break;
+            }
+            if (!solution.Solved)
+            {
+                onHint(HintOutcome.Unsolvable, null);
+                yield break;
+            }
+
             _ads.ShowRewarded(rewarded =>
             {
-                if (!rewarded)
-                {
-                    onHint(null);
-                    return;
-                }
-                var snapshot = State.Clone();
-                var solving = Task.Run(() => Solver.Solve(snapshot));
-                StartCoroutine(DeliverHint(_stateVersion, solving, onHint));
+                if (version != _stateVersion) return;
+                if (rewarded) onHint(HintOutcome.Found, solution.Moves[0]);
+                else onHint(HintOutcome.AdDeclined, null);
             });
         }
 
-        private IEnumerator DeliverHint(int version, Task<SolveResult> solving, Action<Move?> onHint)
+        private void AnalyzeInBackground()
         {
-            while (!solving.IsCompleted) yield return null;
-            if (version != _stateVersion) yield break;
-            if (solving.IsFaulted)
+            if (State == null || State.IsWon) return;
+            if (_analysis != null && !_analysis.IsCompleted) return;
+
+            var snapshot = State.Clone();
+            var analysis = Task.Run(() => Solver.Solve(snapshot));
+            _analysis = analysis;
+            StartCoroutine(FinishAnalysis(_stateVersion, analysis));
+        }
+
+        private IEnumerator FinishAnalysis(int version, Task<SolveResult> analysis)
+        {
+            while (!analysis.IsCompleted) yield return null;
+            if (version != _stateVersion)
             {
-                Debug.LogException(solving.Exception);
-                onHint(null);
+                AnalyzeInBackground();
                 yield break;
             }
-            var result = solving.Result;
-            onHint(result.Solved && result.Moves.Count > 0 ? result.Moves[0] : (Move?)null);
+
+            if (analysis.IsFaulted) Debug.LogException(analysis.Exception);
+            _solution = analysis.IsFaulted ? null : analysis.Result;
+            _solutionVersion = version;
+            // A solve that hit the state limit proves nothing, so only a complete search reports a dead end.
+            if (_solution != null && !_solution.Solved && !_solution.HitStateLimit) ReportStuck();
+        }
+
+        /// <summary>Raises <see cref="LevelStuck"/> at most once per board.</summary>
+        private void ReportStuck()
+        {
+            if (_stuckVersion == _stateVersion) return;
+            _stuckVersion = _stateVersion;
+            LevelStuck?.Invoke();
         }
 
         private Task<GeneratedLevel> GenerateInBackground(int levelNumber)
@@ -180,6 +247,7 @@ namespace Liman.Game
         {
             _stateVersion++;
             StateChanged?.Invoke();
+            AnalyzeInBackground();
         }
 
         private void CompleteLevel()
