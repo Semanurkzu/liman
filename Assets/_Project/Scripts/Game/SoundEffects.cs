@@ -20,6 +20,7 @@ namespace Liman.Game
         public AudioClip Horn { get; private set; }
         public AudioClip Error { get; private set; }
         public AudioClip Win { get; private set; }
+        public AudioClip Star { get; private set; }
 
         public bool Muted
         {
@@ -51,6 +52,7 @@ namespace Liman.Game
                 bool gap = t > 0.08f && t < 0.11f;
                 return gap ? 0f : Mathf.Sign(Sine(150f, t)) * 0.18f;
             });
+            Star = Synth("Star", 0.3f, t => (Sine(1318.5f, t) + 0.4f * Sine(1975.5f, t)) * Mathf.Exp(-t * 14f) * 0.35f);
             float[] notes = { 523.25f, 659.25f, 783.99f, 1046.5f };
             Win = Synth("Win", 0.75f, t =>
             {

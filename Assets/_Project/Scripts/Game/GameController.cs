@@ -32,7 +32,7 @@ namespace Liman.Game
     /// </summary>
     public sealed class GameController : MonoBehaviour
     {
-        private readonly Stack<BoardState> _history = new Stack<BoardState>();
+        private readonly Stack<(BoardState Before, Move Move)> _history = new Stack<(BoardState Before, Move Move)>();
         private readonly Dictionary<int, Task<GeneratedLevel>> _generation = new Dictionary<int, Task<GeneratedLevel>>();
         private IAdService _ads;
         private SaveData _save;
@@ -64,6 +64,12 @@ namespace Liman.Game
 
         /// <summary>Raised after a move is applied and before <see cref="StateChanged"/>, with the state before the move.</summary>
         public event Action<BoardState, Move> MoveApplied;
+
+        /// <summary>Raised after a move is undone and before <see cref="StateChanged"/>, with the state before the undo.</summary>
+        public event Action<BoardState, Move> MoveUndone;
+
+        /// <summary>Raised when a level begins or restarts, before <see cref="StateChanged"/>.</summary>
+        public event Action LevelStarted;
         public event Action<int> LevelCompleted;
         public event Action LevelStuck;
 
@@ -99,6 +105,7 @@ namespace Liman.Game
             State = new BoardState(Level.Level);
             _history.Clear();
             MoveCount = 0;
+            LevelStarted?.Invoke();
             ChangeState();
         }
 
@@ -114,7 +121,7 @@ namespace Liman.Game
             if (State == null || State.IsWon || !State.CanApply(move)) return false;
 
             var before = State.Clone();
-            _history.Push(before);
+            _history.Push((before, move));
             State.Apply(move);
             MoveCount++;
             MoveApplied?.Invoke(before, move);
@@ -128,7 +135,10 @@ namespace Liman.Game
         public void Undo()
         {
             if (!CanUndo) return;
-            State = _history.Pop();
+            var undone = State;
+            var (before, move) = _history.Pop();
+            State = before;
+            MoveUndone?.Invoke(undone, move);
             ChangeState();
         }
 
@@ -232,6 +242,9 @@ namespace Liman.Game
                 // Should not happen (the generator falls back to its best candidate); retry on the next start.
                 Debug.LogException(generation.Exception);
                 _generation.Remove(LevelNumber);
+                State = null;
+                Level = null;
+                ChangeState();
                 return;
             }
 
@@ -241,6 +254,7 @@ namespace Liman.Game
             MoveCount = 0;
             ForgetGenerationsBefore(LevelNumber);
             GenerateInBackground(LevelNumber + 1);
+            LevelStarted?.Invoke();
             ChangeState();
         }
 
